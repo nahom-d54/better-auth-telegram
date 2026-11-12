@@ -100,7 +100,10 @@ export async function isAllowedPlaceholder(user: Record<string, unknown>) {
 }
 
 /** Keep placeholder selection and reservation together so emails never prove identity. */
-export async function oidcPlaceholderEmail(sub: string): Promise<string> {
+export async function oidcPlaceholderEmail(
+  sub: string,
+  providerId = TELEGRAM_OIDC_PROVIDER_ID
+): Promise<string> {
   const direct = directOIDCEmail(sub);
   const identifier = direct ? sub : await opaqueSubjectKey(sub);
   const email = direct ?? oidcEmail(identifier);
@@ -115,7 +118,7 @@ export async function oidcPlaceholderEmail(sub: string): Promise<string> {
     await adapter.findOne({
       model: "account",
       where: [
-        { field: "providerId", value: TELEGRAM_OIDC_PROVIDER_ID },
+        { field: "providerId", value: providerId },
         { field: "accountId", value: sub },
       ],
     })

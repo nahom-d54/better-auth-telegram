@@ -16,7 +16,12 @@ import {
   unlinkTelegramAccount,
 } from "./telegram-account";
 import type { TelegramAuthData } from "./types";
-import { validateTelegramAuthData, verifyTelegramAuth } from "./verify";
+import { validateTelegramAuthData, verifyTelegramAuthAny } from "./verify";
+
+/** Every configured bot token; widget data can be signed by any of them. */
+function botTokens(config: TelegramPluginConfig): string[] {
+  return config.bots.map((bot) => bot.token).filter(Boolean);
+}
 
 /**
  * Validates and verifies a Login Widget payload, returning the proven
@@ -27,7 +32,8 @@ async function verifiedWidgetData(
   config: TelegramPluginConfig,
   body: unknown
 ): Promise<{ data: TelegramAuthData; identity: TelegramIdentity }> {
-  if (!config.botToken) {
+  const tokens = botTokens(config);
+  if (tokens.length === 0) {
     throw APIError.from(
       "INTERNAL_SERVER_ERROR",
       ERROR_CODES.BOT_TOKEN_REQUIRED
@@ -36,7 +42,7 @@ async function verifiedWidgetData(
   if (!validateTelegramAuthData(body)) {
     throw APIError.from("BAD_REQUEST", ERROR_CODES.INVALID_AUTH_DATA);
   }
-  if (!(await verifyTelegramAuth(body, config.botToken, config.maxAuthAge))) {
+  if (!(await verifyTelegramAuthAny(body, tokens, config.maxAuthAge))) {
     throw APIError.from("UNAUTHORIZED", ERROR_CODES.INVALID_AUTHENTICATION);
   }
   return {

@@ -121,6 +121,26 @@ export async function verifyTelegramAuth(
   return verifyHmacHex(secretKey, dataCheckString, hash);
 }
 
+/**
+ * Verifies Login Widget data against any of `botTokens` and returns the token
+ * that signed it, or `null`. Tokens are tried in order; duplicates are
+ * ignored. The algorithm and freshness check are the same as
+ * {@link verifyTelegramAuth}.
+ */
+export async function verifyTelegramAuthAny(
+  data: TelegramAuthData,
+  botTokens: readonly string[],
+  maxAge = DEFAULT_MAX_AUTH_AGE
+): Promise<string | null> {
+  for (const botToken of new Set(botTokens.filter(Boolean))) {
+    // biome-ignore lint/performance/noAwaitInLoops: each token is tried until one matches.
+    if (await verifyTelegramAuth(data, botToken, maxAge)) {
+      return botToken;
+    }
+  }
+  return null;
+}
+
 /** Reject identities that JSON numbers cannot represent without changing them. */
 function isTelegramUserId(id: unknown): id is number {
   return typeof id === "number" && Number.isSafeInteger(id) && id > 0;
@@ -211,6 +231,26 @@ export async function verifyMiniAppInitData(
   );
 
   return verifyHmacHex(secretKey, dataCheckString, hash);
+}
+
+/**
+ * Verifies Mini App initData against any of `botTokens` and returns the token
+ * that signed it, or `null`. Tokens are tried in order; duplicates are
+ * ignored. The algorithm and freshness check are the same as
+ * {@link verifyMiniAppInitData}.
+ */
+export async function verifyMiniAppInitDataAny(
+  initData: string,
+  botTokens: readonly string[],
+  maxAge = DEFAULT_MAX_AUTH_AGE
+): Promise<string | null> {
+  for (const botToken of new Set(botTokens.filter(Boolean))) {
+    // biome-ignore lint/performance/noAwaitInLoops: each token is tried until one matches.
+    if (await verifyMiniAppInitData(initData, botToken, maxAge)) {
+      return botToken;
+    }
+  }
+  return null;
 }
 
 /**

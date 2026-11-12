@@ -12,6 +12,12 @@ const TELEGRAM_WIDGET_SCRIPT = "https://telegram.org/js/telegram-widget.js?24";
  */
 export interface TelegramWidgetOptions {
   /**
+   * Bot key to render, as listed by `GET /telegram/config`. Defaults to the
+   * first bot.
+   */
+  bot?: string;
+
+  /**
    * Corner radius of the button
    * @default 20
    */
@@ -129,7 +135,11 @@ async function renderWidget(
     "/telegram/config",
     // The renderer handles errors itself and needs the response envelope,
     // even when the auth client defaults to `throw: true`.
-    { method: "GET", throw: false }
+    {
+      method: "GET",
+      throw: false,
+      ...(options.bot ? { query: { bot: options.bot } } : {}),
+    }
   );
   if (pendingRenders.get(element) !== request) {
     return null;

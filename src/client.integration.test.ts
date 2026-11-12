@@ -10,11 +10,13 @@ import { TELEGRAM_ERROR_CODES, telegramClient } from "./client";
 import {
   BASE_URL,
   createMemoryAuth,
+  multiBots,
   signInitData,
   signWidgetData,
 } from "./testing/harness";
+import type { TelegramPluginOptions } from "./types";
 
-function setup() {
+function setup(overrides: Partial<TelegramPluginOptions> = {}) {
   const { auth, db } = createMemoryAuth(
     {
       miniApp: { enabled: true },
@@ -23,6 +25,7 @@ function setup() {
         clientId: "987654321",
         clientSecret: "oidc-client-secret",
       },
+      ...overrides,
     },
     { emailAndPassword: { enabled: true } }
   );
@@ -135,7 +138,16 @@ describe("client actions against the real server", () => {
       miniAppEnabled: true,
       oidcEnabled: true,
       testMode: false,
+      bots: [{ key: "default", username: "test_bot" }],
     });
+  });
+
+  it("getTelegramConfig forwards a bot selector as a query parameter", async () => {
+    const { client, requests } = setup();
+
+    await client.getTelegramConfig({ bot: "default" });
+
+    expect(new URL(requests[0]!.url).searchParams.get("bot")).toBe("default");
   });
 
   it("validateMiniApp parses valid data without signing the user in", async () => {
@@ -169,6 +181,23 @@ describe("client actions against the real server", () => {
     expect((data as any).url).toMatch(
       /^https:\/\/oauth\.telegram\.org\/auth\?/u
     );
+  });
+
+  it("signInWithTelegramOIDC selects a provider from a bot key or providerId", async () => {
+    const { client, requests } = setup({
+      bots: multiBots({
+        clientId: "987654321",
+        clientSecret: "oidc-client-secret",
+      }),
+    });
+
+    await client.signInWithTelegramOIDC({ bot: "ngo" });
+    await client.signInWithTelegramOIDC({
+      providerId: "telegram-oidc-custom",
+    });
+
+    expect((await requests[0]!.json()).provider).toBe("telegram-oidc-ngo");
+    expect((await requests[1]!.json()).provider).toBe("telegram-oidc-custom");
   });
 });
 

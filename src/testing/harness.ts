@@ -7,7 +7,15 @@ export {
   createSqliteAuth,
   type MemoryDB,
 } from "./auth";
-export { BASE_URL, BOT_ID, BOT_TOKEN, MINI_APP_SIGNATURE } from "./constants";
+export { MULTI_BOTS, multiBots } from "./bots";
+export {
+  BASE_URL,
+  BOT_ID,
+  BOT_TOKEN,
+  MINI_APP_SIGNATURE,
+  SECOND_BOT_ID,
+  SECOND_BOT_TOKEN,
+} from "./constants";
 export { createClient, type TestClient } from "./http-client";
 export { signInWithTelegramOIDC, telegramClaims } from "./oidc-flow";
 export {

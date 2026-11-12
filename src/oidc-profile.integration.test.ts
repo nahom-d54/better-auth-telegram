@@ -11,6 +11,7 @@ import {
   createClient,
   createMemoryAuth,
   mockTelegramOIDC,
+  multiBots,
   signInWithTelegramOIDC,
   type TelegramOIDCMock,
   telegramClaims,
@@ -362,5 +363,33 @@ describe("an async mapOIDCProfileToUser", () => {
     await signInWithTelegramOIDC(client, telegramMock);
 
     expect(db.user[0]!.user_id).toBe(43);
+  });
+});
+
+describe("mapOIDCProfileToUser with multiple bots", () => {
+  it("applies the mapper to a non-default bot's provider", async () => {
+    const { client, db } = createMemoryAuth({
+      loginWidget: false,
+      miniApp: { enabled: true },
+      bots: multiBots({
+        clientId: telegramMock.clientId,
+        clientSecret: telegramMock.clientSecret,
+      }),
+      oidc: {
+        enabled: true,
+        mapOIDCProfileToUser: () => ({ name: "Mapped by the app" }),
+      },
+    });
+
+    const { location } = await signInWithTelegramOIDC(
+      client,
+      telegramMock,
+      telegramClaims({ sub: "sub-ngo" }),
+      { provider: "telegram-oidc-ngo" }
+    );
+
+    expect(location).toBe("/dashboard");
+    expect(db.user[0]!.name).toBe("Mapped by the app");
+    expect(db.account[0]!.providerId).toBe("telegram-oidc-ngo");
   });
 });

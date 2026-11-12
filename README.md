@@ -23,6 +23,7 @@
 - [Requirements](#requirements)
 - [Quick start (about 10 minutes)](#quick-start-about-10-minutes)
 - [The other sign-in methods](#the-other-sign-in-methods)
+- [Multiple bots](#multiple-bots)
 - [What the plugin stores](#what-the-plugin-stores)
 - [Documentation](#documentation)
 - [Upgrading from v2](#upgrading-from-v2)
@@ -241,6 +242,49 @@ await authClient.signInWithTelegramOIDC({ callbackURL: "/dashboard" });
 ```
 
 Full guide, including phone numbers and limits: [OIDC](docs/oidc.md).
+
+## Multiple bots
+
+One Better Auth instance can serve several Telegram bots while keeping one cookie and one `/api/auth` mount. This is useful when each product board has its own bot, Mini App and OIDC app:
+
+```ts
+telegram({
+  bots: [
+    {
+      key: "default",
+      token: process.env.TELEGRAM_BOT_TOKEN!,
+      username: "ethiotechjobsbot",
+      oidc: { clientId: process.env.TELEGRAM_OIDC_CLIENT_ID, clientSecret: process.env.TELEGRAM_OIDC_CLIENT_SECRET },
+    },
+    {
+      key: "ngo",
+      token: process.env.NGO_TELEGRAM_BOT_TOKEN!,
+      username: "ngojobsbot",
+      oidc: { clientId: process.env.NGO_OIDC_CLIENT_ID, clientSecret: process.env.NGO_OIDC_CLIENT_SECRET },
+    },
+  ],
+  loginWidget: false,
+  miniApp: { enabled: true, validateInitData: true, allowAutoSignin: true },
+});
+```
+
+The bot with key `default` keeps the OIDC provider id `telegram-oidc`, so existing OIDC accounts continue to work. Every other bot uses `telegram-oidc-<key>` (for example `telegram-oidc-ngo`) unless you set `bots[].oidc.providerId`. Bot keys must be unique and match `^[a-z0-9-]+$`.
+
+Each OIDC bot needs its own callback URL registered in that bot's BotFather OIDC app:
+
+```
+https://<api-host>/api/auth/callback/<providerId>
+```
+
+Mini App and Login Widget payloads are accepted from any configured bot token. `GET /telegram/config?bot=<key>` selects a bot (the first bot is the default), and the client helpers accept `bot`:
+
+```ts
+await authClient.getTelegramConfig({ bot: "ngo" });
+await authClient.signInWithTelegramOIDC({ bot: "ngo", callbackURL: "/dashboard" });
+await authClient.initTelegramWidget("telegram-login", { bot: "ngo" }, onAuth);
+```
+
+`botToken` and `botUsername` still work on their own. They are normalized to the `default` bot, and supply that entry when `bots[]` does not contain one.
 
 ## What the plugin stores
 

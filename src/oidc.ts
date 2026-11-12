@@ -70,11 +70,14 @@ function displayName(claims: TelegramOIDCClaims): string | undefined {
  * @param options - OIDC configuration options
  * @param logger - Where sign-in diagnostics go; the plugin passes Better
  *   Auth's logger (`ctx.logger`)
+ * @param providerId - Better Auth social provider id; defaults to
+ *   `telegram-oidc`, the id existing accounts are stored under
  */
 export function createTelegramOIDCProvider(
   botToken: string,
   options: TelegramOIDCOptions = {},
-  logger: { warn: (message: string, ...args: unknown[]) => void } = console
+  logger: { warn: (message: string, ...args: unknown[]) => void } = console,
+  providerId = TELEGRAM_OIDC_PROVIDER_ID
 ): OAuthProvider<TelegramOIDCClaims> {
   const botId = botToken.split(":")[0]!;
 
@@ -128,7 +131,7 @@ export function createTelegramOIDCProvider(
   };
 
   return {
-    id: TELEGRAM_OIDC_PROVIDER_ID,
+    id: providerId,
     name: "Telegram",
     issuer: TELEGRAM_OIDC_ISSUER,
     requiresIdTokenNonce: true,
@@ -153,7 +156,7 @@ export function createTelegramOIDCProvider(
       const _scopes = buildScopes(options, scopes);
 
       return createAuthorizationURL({
-        id: TELEGRAM_OIDC_PROVIDER_ID,
+        id: providerId,
         options: providerOptions,
         authorizationEndpoint: TELEGRAM_OIDC_AUTH_ENDPOINT,
         scopes: _scopes,
@@ -228,11 +231,11 @@ export function createTelegramOIDCProvider(
         name: displayName(claims),
         image: claims.picture,
         // Telegram OIDC has no email claim; Better Auth requires one.
-        email: await oidcPlaceholderEmail(claims.sub),
+        email: await oidcPlaceholderEmail(claims.sub, providerId),
         ...mapped,
         emailVerified: false,
       };
-      await rememberVerifiedClaims(claims, user);
+      await rememberVerifiedClaims(claims, user, providerId);
 
       return { user, data: claims };
     },

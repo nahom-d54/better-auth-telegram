@@ -9,7 +9,7 @@ import { findOrCreateTelegramUser, startSession } from "./telegram-account";
 import {
   parseMiniAppInitData,
   validateMiniAppData,
-  verifyMiniAppInitData,
+  verifyMiniAppInitDataAny,
 } from "./verify";
 
 function readInitData(body: unknown): string {
@@ -20,14 +20,20 @@ function readInitData(body: unknown): string {
   return initData;
 }
 
-function requireBotToken(config: TelegramPluginConfig): string {
-  if (!config.botToken) {
+/** Every configured bot token; HMAC data can come from any of them. */
+function botTokens(config: TelegramPluginConfig): string[] {
+  return config.bots.map((bot) => bot.token).filter(Boolean);
+}
+
+function requireBotTokens(config: TelegramPluginConfig): string[] {
+  const tokens = botTokens(config);
+  if (tokens.length === 0) {
     throw APIError.from(
       "INTERNAL_SERVER_ERROR",
       ERROR_CODES.BOT_TOKEN_REQUIRED
     );
   }
-  return config.botToken;
+  return tokens;
 }
 
 /**
@@ -47,9 +53,9 @@ export function createMiniAppEndpoints(config: TelegramPluginConfig) {
 
         if (
           config.miniAppValidateInitData &&
-          !(await verifyMiniAppInitData(
+          !(await verifyMiniAppInitDataAny(
             initData,
-            requireBotToken(config),
+            requireBotTokens(config),
             config.maxAuthAge
           ))
         ) {
@@ -99,11 +105,13 @@ export function createMiniAppEndpoints(config: TelegramPluginConfig) {
       },
       async (ctx) => {
         const initData = readInitData(ctx.body);
-        const botToken = requireBotToken(config);
+        const matched = await verifyMiniAppInitDataAny(
+          initData,
+          requireBotTokens(config),
+          config.maxAuthAge
+        );
 
-        if (
-          !(await verifyMiniAppInitData(initData, botToken, config.maxAuthAge))
-        ) {
+        if (!matched) {
           return ctx.json({
             valid: false,
             data: null,
@@ -113,6 +121,7 @@ export function createMiniAppEndpoints(config: TelegramPluginConfig) {
         return ctx.json({
           valid: true,
           data: parseMiniAppInitData(initData),
+          botId: matched.split(":")[0] || undefined,
         });
       }
     ),

@@ -11,6 +11,7 @@ import {
   createMemoryAuth,
   createSqliteAuth,
   mockTelegramOIDC,
+  multiBots,
   signInitData,
   signInWithTelegramOIDC,
   signWidgetData,
@@ -86,7 +87,7 @@ describe("configuration warnings", () => {
 });
 
 describe("GET /telegram/config", () => {
-  it("exposes exactly the five documented fields and no secret", async () => {
+  it("exposes the documented fields, every bot, and no secret", async () => {
     const clientSecret = "oidc-client-secret-value";
     const { client } = createMemoryAuth({
       miniApp: { enabled: true },
@@ -101,9 +102,43 @@ describe("GET /telegram/config", () => {
       miniAppEnabled: true,
       oidcEnabled: true,
       testMode: false,
+      bots: [{ key: "default", username: "test_bot" }],
     });
     expect(response.text).not.toContain(BOT_TOKEN.split(":")[1]);
     expect(response.text).not.toContain(clientSecret);
+  });
+
+  it("describes the first bot by default and lists every bot", async () => {
+    const { client } = createMemoryAuth({ bots: multiBots() });
+
+    const response = await client.get("/telegram/config");
+
+    expect(response.json).toMatchObject({
+      botUsername: "test_bot",
+      bots: [
+        { key: "default", username: "test_bot" },
+        { key: "ngo", username: "ngo_bot" },
+      ],
+    });
+  });
+
+  it("selects a bot by key", async () => {
+    const { client } = createMemoryAuth({ bots: multiBots() });
+
+    const response = await client.get("/telegram/config?bot=ngo");
+
+    expect(response.status).toBe(200);
+    expect(response.json.botUsername).toBe("ngo_bot");
+  });
+
+  it("answers 404 for an unknown bot key", async () => {
+    const { client } = createMemoryAuth({ bots: multiBots() });
+
+    const response = await client.get("/telegram/config?bot=missing");
+
+    expect(response.status).toBe(404);
+    expect(response.json.code).toBe("BOT_NOT_FOUND");
+    expect(response.text).not.toContain("test_bot");
   });
 });
 

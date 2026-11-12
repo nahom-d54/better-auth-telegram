@@ -188,3 +188,177 @@ describe("createPluginConfig", () => {
     ).toEqual([]);
   });
 });
+
+describe("createPluginConfig with multiple bots", () => {
+  const ngo = {
+    key: "ngo",
+    token: "987654321:AAsecondtesttokentesttokentesttoken",
+    username: "ngo_bot",
+  };
+
+  it("normalizes the legacy singular pair into the default bot", () => {
+    const config = createPluginConfig(BASE);
+
+    expect(config.bots).toEqual([
+      {
+        key: "default",
+        token: BASE.botToken,
+        username: BASE.botUsername,
+      },
+    ]);
+    expect(config.botToken).toBe(BASE.botToken);
+    expect(config.botUsername).toBe(BASE.botUsername);
+  });
+
+  it("keeps botToken and botUsername pointed at the first bot", () => {
+    const config = createPluginConfig({ bots: [ngo] });
+
+    expect(config.bots.map((bot) => bot.key)).toEqual(["ngo"]);
+    expect(config.botToken).toBe(ngo.token);
+    expect(config.botUsername).toBe(ngo.username);
+  });
+
+  it("uses the singular pair as the default bot when bots[] omits it", () => {
+    const config = createPluginConfig({ ...BASE, bots: [ngo] });
+
+    expect(config.bots).toEqual([
+      { key: "default", token: BASE.botToken, username: BASE.botUsername },
+      { key: "ngo", token: ngo.token, username: ngo.username },
+    ]);
+  });
+
+  it("keeps telegram-oidc for the default bot and names the others by key", () => {
+    const config = createPluginConfig({
+      bots: [
+        { ...ngo, oidc: { clientId: "1", clientSecret: "s" } },
+        {
+          key: "default",
+          token: BASE.botToken,
+          username: BASE.botUsername,
+          oidc: { clientId: "2", clientSecret: "s" },
+        },
+        {
+          key: "override",
+          token: "111:thirdtoken",
+          oidc: {
+            clientId: "3",
+            clientSecret: "s",
+            providerId: "telegram-oidc-custom",
+          },
+        },
+      ],
+      loginWidget: false,
+      oidc: { enabled: true },
+    });
+
+    expect(config.oidcProviderIds).toEqual([
+      "telegram-oidc-ngo",
+      "telegram-oidc",
+      "telegram-oidc-custom",
+    ]);
+  });
+
+  it.each([
+    ["invalid", [{ ...ngo, key: "NGO" }]],
+    [
+      "duplicate",
+      [ngo, { key: "ngo", token: BASE.botToken, username: BASE.botUsername }],
+    ],
+  ])("throws a plain Error for an %s bot key", (_case, bots) => {
+    expect(() => createPluginConfig({ bots: bots as never })).toThrow(Error);
+  });
+
+  it("throws a plain Error for duplicate OIDC provider ids", () => {
+    expect(() =>
+      createPluginConfig({
+        bots: [
+          {
+            key: "default",
+            token: BASE.botToken,
+            username: BASE.botUsername,
+            oidc: { clientId: "1", clientSecret: "s" },
+          },
+          {
+            ...ngo,
+            oidc: {
+              clientId: "2",
+              clientSecret: "s",
+              providerId: "telegram-oidc",
+            },
+          },
+        ],
+        loginWidget: false,
+        oidc: { enabled: true },
+      })
+    ).toThrow(/Duplicate OIDC provider id/u);
+  });
+
+  it("warns about duplicate tokens without ever printing them", () => {
+    const config = createPluginConfig({
+      bots: [
+        { ...ngo, token: BASE.botToken },
+        { key: "default", token: BASE.botToken, username: BASE.botUsername },
+      ],
+    });
+
+    expect(config.warnings).toContainEqual(
+      expect.stringContaining('Bot keys "ngo" and "default" use the same token')
+    );
+    expect(config.warnings.join("\n")).not.toContain(BASE.botToken);
+  });
+
+  it("warns per bot about whitespace, @ and invalid token shapes", () => {
+    const config = createPluginConfig({
+      bots: [
+        {
+          key: "default",
+          token: ` ${BASE.botToken}\n`,
+          username: "@test_bot",
+        },
+        { key: "ngo", token: "not-a-token", username: "ngo_bot" },
+      ],
+    });
+
+    expect(config.warnings).toEqual([
+      expect.stringContaining('Bot "default": removed whitespace'),
+      expect.stringContaining('Bot "default": username "@test_bot"'),
+      expect.stringContaining('Bot "ngo": the token doesn'),
+    ]);
+  });
+
+  it("warns per bot about missing OIDC credentials", () => {
+    const config = createPluginConfig({
+      bots: [
+        {
+          key: "default",
+          token: BASE.botToken,
+          username: BASE.botUsername,
+          oidc: { clientSecret: "s" },
+        },
+        { key: "ngo", token: "", username: "ngo_bot", oidc: {} },
+      ],
+      loginWidget: false,
+      oidc: { enabled: true },
+    });
+
+    expect(config.warnings).toEqual([
+      expect.stringContaining('Bot "ngo": OIDC: clientId is required'),
+      expect.stringContaining('Bot "ngo": OIDC: clientSecret is required'),
+    ]);
+  });
+
+  it("inherits legacy global OIDC credentials for the default bot only", () => {
+    const config = createPluginConfig({
+      ...BASE,
+      bots: [ngo],
+      loginWidget: false,
+      oidc: { enabled: true, clientId: "555", clientSecret: "s" },
+    });
+
+    expect(config.bots.find((bot) => bot.key === "ngo")?.oidc).toBeUndefined();
+    expect(config.bots.find((bot) => bot.key === "default")?.oidc).toEqual({
+      clientId: "555",
+      clientSecret: "s",
+    });
+  });
+});

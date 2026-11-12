@@ -11,8 +11,17 @@
  * Freshness boundaries live in verify-hardening.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { signInitParams } from "./testing/harness";
-import { verifyMiniAppInitData, verifyTelegramAuth } from "./verify";
+import {
+  signInitData,
+  signInitParams,
+  signWidgetData,
+} from "./testing/harness";
+import {
+  verifyMiniAppInitData,
+  verifyMiniAppInitDataAny,
+  verifyTelegramAuth,
+  verifyTelegramAuthAny,
+} from "./verify";
 
 const BOT_TOKEN = "123456789:AAtesttokentesttokentesttokentest";
 /** Same bot id, different secret: the key must come from the whole token. */
@@ -121,5 +130,88 @@ describe("Mini App initData hash (literal vector)", () => {
     });
 
     expect(await verifyMiniAppInitData(undated, BOT_TOKEN)).toBe(false);
+  });
+});
+
+describe("multiple bot tokens", () => {
+  const OTHER_TOKEN = "987654321:AAsecondtesttokentesttokentesttoken";
+
+  it("returns the token that signed Login Widget data", async () => {
+    const fromFirst = await signWidgetData({ id: 42 }, BOT_TOKEN);
+    const fromSecond = await signWidgetData({ id: 43 }, OTHER_TOKEN);
+    const tokens = [BOT_TOKEN, OTHER_TOKEN];
+
+    expect(await verifyTelegramAuthAny(fromFirst as never, tokens)).toBe(
+      BOT_TOKEN
+    );
+    expect(await verifyTelegramAuthAny(fromSecond as never, tokens)).toBe(
+      OTHER_TOKEN
+    );
+    expect(
+      await verifyTelegramAuthAny({ ...fromSecond, id: 44 } as never, tokens)
+    ).toBeNull();
+  });
+
+  it("deduplicates tokens and ignores empty entries", async () => {
+    const data = await signWidgetData({ id: 42 }, OTHER_TOKEN);
+
+    expect(
+      await verifyTelegramAuthAny(data as never, [
+        BOT_TOKEN,
+        BOT_TOKEN,
+        "",
+        OTHER_TOKEN,
+      ])
+    ).toBe(OTHER_TOKEN);
+  });
+
+  it("rejects stale data against every token", async () => {
+    const stale = await signWidgetData(
+      { id: 42, auth_date: AUTH_DATE - 3601 },
+      BOT_TOKEN
+    );
+
+    expect(
+      await verifyTelegramAuthAny(
+        stale as never,
+        [BOT_TOKEN, OTHER_TOKEN],
+        3600
+      )
+    ).toBeNull();
+  });
+
+  it("returns the token that signed Mini App initData", async () => {
+    const fromFirst = await signInitData({ id: 7 }, {}, BOT_TOKEN);
+    const fromSecond = await signInitData({ id: 8 }, {}, OTHER_TOKEN);
+    const tokens = [BOT_TOKEN, OTHER_TOKEN];
+
+    expect(await verifyMiniAppInitDataAny(fromFirst, tokens)).toBe(BOT_TOKEN);
+    expect(await verifyMiniAppInitDataAny(fromSecond, tokens)).toBe(
+      OTHER_TOKEN
+    );
+    expect(
+      await verifyMiniAppInitDataAny(fromSecond.replace("Ann", "Bob"), tokens)
+    ).toBeNull();
+  });
+
+  it("deduplicates Mini App tokens and rejects stale initData", async () => {
+    const data = await signInitData({ id: 7 }, {}, OTHER_TOKEN);
+    const stale = await signInitData(
+      { id: 7 },
+      { auth_date: String(AUTH_DATE - 3601) },
+      OTHER_TOKEN
+    );
+
+    expect(
+      await verifyMiniAppInitDataAny(data, [
+        BOT_TOKEN,
+        OTHER_TOKEN,
+        OTHER_TOKEN,
+        "",
+      ])
+    ).toBe(OTHER_TOKEN);
+    expect(
+      await verifyMiniAppInitDataAny(stale, [BOT_TOKEN, OTHER_TOKEN], 3600)
+    ).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   createMemoryAuth,
   mockTelegramOIDC,
+  multiBots,
   signInWithTelegramOIDC,
   type TelegramOIDCMock,
   telegramClaims,
@@ -59,5 +60,30 @@ test("gives mappers the same string identity for numeric and string ID tokens", 
   expect(db.account[0]).toMatchObject({
     providerId: "telegram-oidc",
     accountId: "12224742808376279442",
+  });
+});
+
+test("normalizes the numeric id claim for a non-default bot", async () => {
+  const { client, db } = createMemoryAuth({
+    loginWidget: false,
+    miniApp: { enabled: true },
+    bots: multiBots({
+      clientId: telegram.clientId,
+      clientSecret: telegram.clientSecret,
+    }),
+    oidc: { enabled: true },
+  });
+
+  await signInWithTelegramOIDC(
+    client,
+    telegram,
+    telegramClaims({ id: 987_654_321, sub: "sub-ngo" }),
+    { provider: "telegram-oidc-ngo" }
+  );
+
+  expect(db.user[0]!.telegramId).toBe("987654321");
+  expect(db.account[0]).toMatchObject({
+    providerId: "telegram-oidc-ngo",
+    accountId: "sub-ngo",
   });
 });

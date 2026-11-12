@@ -245,6 +245,44 @@ export async function signInWithTelegramOIDC() {
     console.error("Could not start Telegram sign-in:", error.message);
   }
 }
+
+// README "Multiple bots"
+export const multipleBots = telegram({
+  bots: [
+    {
+      key: "default",
+      token: process.env.TELEGRAM_BOT_TOKEN!,
+      username: "ethiotechjobsbot",
+      oidc: {
+        clientId: process.env.TELEGRAM_OIDC_CLIENT_ID,
+        clientSecret: process.env.TELEGRAM_OIDC_CLIENT_SECRET,
+      },
+    },
+    {
+      key: "ngo",
+      token: process.env.NGO_TELEGRAM_BOT_TOKEN!,
+      username: "ngojobsbot",
+      oidc: {
+        clientId: process.env.NGO_OIDC_CLIENT_ID,
+        clientSecret: process.env.NGO_OIDC_CLIENT_SECRET,
+      },
+    },
+  ],
+  loginWidget: false,
+  miniApp: { enabled: true, validateInitData: true, allowAutoSignin: true },
+});
+export async function selectTelegramBot() {
+  await authClient.getTelegramConfig({ bot: "ngo" });
+  await authClient.signInWithTelegramOIDC({
+    bot: "ngo",
+    callbackURL: "/dashboard",
+  });
+  await authClient.initTelegramWidget(
+    "telegram-login",
+    { bot: "ngo" },
+    () => undefined
+  );
+}
 export async function signInWithTelegramWelcome() {
   await authClient.signIn.social({
     provider: "telegram-oidc",

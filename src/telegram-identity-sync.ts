@@ -5,12 +5,11 @@ import {
 } from "@better-auth/core/context";
 import type { Account } from "better-auth";
 import { APIError } from "better-auth/api";
-import { ERROR_CODES, PLUGIN_ID, TELEGRAM_OIDC_PROVIDER_ID } from "./constants";
+import { ERROR_CODES } from "./constants";
 import type { TelegramAccount, TelegramUser } from "./telegram-account-state";
 import { markChanged } from "./telegram-identity-state";
+import { isTelegramProvider } from "./telegram-providers";
 import type { TelegramOIDCClaims } from "./types";
-
-const TELEGRAM_PROVIDERS = new Set([PLUGIN_ID, TELEGRAM_OIDC_PROVIDER_ID]);
 
 /**
  * Copies the Telegram identity from a verified OIDC ID token onto the user:
@@ -102,15 +101,15 @@ export async function syncTelegramIdentity(
 export async function accountProvenByClaims(
   ctx: AuthContext,
   userId: string,
-  claims: TelegramOIDCClaims
+  claims: TelegramOIDCClaims,
+  providerId: string
 ) {
   const accounts = (await ctx.internalAdapter.findAccounts(
     userId
   )) as TelegramAccount[];
   return accounts.find(
     (account) =>
-      account.providerId === TELEGRAM_OIDC_PROVIDER_ID &&
-      account.accountId === claims.sub
+      account.providerId === providerId && account.accountId === claims.sub
   );
 }
 
@@ -137,7 +136,7 @@ export async function reconcileTelegramIdentity(
   )) as TelegramAccount[];
   const proving = accounts.filter(
     (account) =>
-      TELEGRAM_PROVIDERS.has(account.providerId) && account.telegramId
+      isTelegramProvider(ctx, account.providerId) && account.telegramId
   );
   if (proving.some((account) => account.telegramId === user.telegramId)) {
     return;

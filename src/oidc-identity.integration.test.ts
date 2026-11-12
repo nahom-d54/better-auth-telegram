@@ -12,6 +12,7 @@ import {
   createClient,
   createMemoryAuth,
   mockTelegramOIDC,
+  multiBots,
   signInitData,
   signInWithTelegramOIDC,
   signWidgetData,
@@ -209,6 +210,38 @@ describe("Telegram identity on OIDC users", () => {
       "telegram-oidc",
     ]);
     expect(db.user[0]!.telegramId).toBe("42");
+  });
+
+  it("stores one Telegram id for the same user across two bots", async () => {
+    const { client, db } = createMemoryAuth({
+      loginWidget: false,
+      miniApp: { enabled: true },
+      bots: multiBots({
+        clientId: telegramMock.clientId,
+        clientSecret: telegramMock.clientSecret,
+      }),
+      oidc: { enabled: true },
+    });
+
+    await signInWithTelegramOIDC(client, telegramMock, telegramClaims());
+    client.clearCookies();
+    await signInWithTelegramOIDC(
+      client,
+      telegramMock,
+      telegramClaims({ sub: "sub-ngo" }),
+      { provider: "telegram-oidc-ngo" }
+    );
+
+    expect(db.user).toHaveLength(1);
+    expect(db.user[0]!.telegramId).toBe("8306595751");
+    expect(db.account.map((account) => account.providerId).sort()).toEqual([
+      "telegram-oidc",
+      "telegram-oidc-ngo",
+    ]);
+    expect(db.account.map((account) => account.telegramId)).toEqual([
+      "8306595751",
+      "8306595751",
+    ]);
   });
 });
 

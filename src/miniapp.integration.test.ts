@@ -1,8 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import {
+  BOT_ID,
+  BOT_TOKEN,
   createMemoryAuth,
   createSqliteAuth,
+  multiBots,
+  SECOND_BOT_ID,
+  SECOND_BOT_TOKEN,
   signInitData,
   signInitParams,
   signWidgetData,
@@ -271,5 +276,60 @@ describe("Mini App request validation", () => {
 
     expect(response.status).toBe(200);
     expect(response.json).toEqual({ valid: false, data: null });
+  });
+});
+
+describe("Mini App sign-in with multiple bots", () => {
+  const multi = () => ({ bots: multiBots(), miniApp: { enabled: true } });
+
+  it("signs in with either bot's initData and resolves the same Telegram user", async () => {
+    const { client, db } = createMemoryAuth(multi());
+
+    const first = await client.post("/telegram/miniapp/signin", {
+      initData: await signInitData({ id: 7 }, {}, BOT_TOKEN),
+    });
+    client.clearCookies();
+    const second = await client.post("/telegram/miniapp/signin", {
+      initData: await signInitData({ id: 7 }, {}, SECOND_BOT_TOKEN),
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.json.user.id).toBe(first.json.user.id);
+    expect(db.user).toHaveLength(1);
+    expect(db.account).toHaveLength(1);
+  });
+
+  it("reports the numeric id of the bot whose token matched", async () => {
+    const { client } = createMemoryAuth(multi());
+
+    const first = await client.post("/telegram/miniapp/validate", {
+      initData: await signInitData({ id: 7 }, {}, BOT_TOKEN),
+    });
+    const second = await client.post("/telegram/miniapp/validate", {
+      initData: await signInitData({ id: 7 }, {}, SECOND_BOT_TOKEN),
+    });
+
+    expect(first.json).toMatchObject({ valid: true, botId: BOT_ID });
+    expect(second.json).toMatchObject({ valid: true, botId: SECOND_BOT_ID });
+  });
+
+  it("still rejects initData from an unknown bot", async () => {
+    const { client, db } = createMemoryAuth(multi());
+    const initData = await signInitData(
+      { id: 7 },
+      {},
+      "999999999:AAunknownbot"
+    );
+
+    const signIn = await client.post("/telegram/miniapp/signin", { initData });
+    const validate = await client.post("/telegram/miniapp/validate", {
+      initData,
+    });
+
+    expect(signIn.status).toBe(401);
+    expect(signIn.json.code).toBe("INVALID_MINI_APP_INIT_DATA");
+    expect(validate.json).toEqual({ valid: false, data: null });
+    expect(db.user).toHaveLength(0);
   });
 });

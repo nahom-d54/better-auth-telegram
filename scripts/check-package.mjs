@@ -11,9 +11,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+// `npm` is a .cmd shim on Windows, which `execFileSync` can only launch via a
+// shell.
+const npmShell = process.platform === "win32";
 const packResult = JSON.parse(
   execFileSync("npm", ["pack", "--ignore-scripts", "--json"], {
     encoding: "utf8",
+    shell: npmShell,
   })
 );
 const packed = Array.isArray(packResult)
@@ -53,6 +57,7 @@ try {
     {
       cwd: consumer,
       stdio: "inherit",
+      shell: npmShell,
     }
   );
   cpSync("test-d", join(consumer, "test-d"), { recursive: true });

@@ -1,6 +1,8 @@
 /** Test fixtures are independent of production constants so wrong URLs cannot agree by accident. */
 export const BOT_TOKEN = "123456789:AAtesttokentesttokentesttokentest";
 export const BOT_ID = "123456789";
+export const SECOND_BOT_TOKEN = "987654321:AAsecondtesttokentesttokentesttoken";
+export const SECOND_BOT_ID = "987654321";
 export const BASE_URL = "http://localhost:3000";
 export const TELEGRAM_ISSUER = "https://oauth.telegram.org";
 export const TELEGRAM_AUTHORIZATION_ENDPOINT =

@@ -2,7 +2,8 @@ import type { GenericEndpointContext } from "@better-auth/core";
 import { getCurrentAdapter } from "@better-auth/core/context";
 import type { Account, User } from "better-auth";
 import { APIError } from "better-auth/api";
-import { ERROR_CODES, PLUGIN_ID, TELEGRAM_OIDC_PROVIDER_ID } from "./constants";
+import { ERROR_CODES, PLUGIN_ID } from "./constants";
+import { isOIDCProvider } from "./telegram-providers";
 import type { TelegramOIDCClaims } from "./types";
 
 /** Only a surviving linked account can authorize another Telegram login. */
@@ -29,7 +30,7 @@ export async function findProvenTelegramUser(
   return accounts.some(
     (account) =>
       (account.providerId === PLUGIN_ID && account.accountId === telegramId) ||
-      (account.providerId === TELEGRAM_OIDC_PROVIDER_ID &&
+      (isOIDCProvider(ctx.context, account.providerId) &&
         account.telegramId === telegramId)
   )
     ? user
@@ -40,7 +41,8 @@ export async function validateTelegramOIDCLink(
   ctx: GenericEndpointContext,
   user: User,
   claims: TelegramOIDCClaims,
-  profile: Record<string, unknown>
+  profile: Record<string, unknown>,
+  providerId: string
 ) {
   const validate = ctx.context.options.user?.validateUserInfo;
   if (!validate) {
@@ -66,7 +68,7 @@ export async function validateTelegramOIDCLink(
             method: "oauth",
             action,
             oauth: {
-              providerId: TELEGRAM_OIDC_PROVIDER_ID,
+              providerId,
               profile: { ...claims },
             },
           },

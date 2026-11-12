@@ -18,6 +18,17 @@ const CLIENT_SECRET = "client-secret-from-botfather";
 describe("accountSubject", () => {
   const profile = telegramClaims() as unknown as TelegramOIDCClaims;
 
+  it("uses a caller-supplied provider id for additional bots", () => {
+    const provider = createTelegramOIDCProvider(
+      BOT_TOKEN,
+      { clientSecret: CLIENT_SECRET },
+      console,
+      "telegram-oidc-ngo"
+    );
+
+    expect(provider.id).toBe("telegram-oidc-ngo");
+  });
+
   it.each([
     ["empty", ""],
     ["numeric", 123],

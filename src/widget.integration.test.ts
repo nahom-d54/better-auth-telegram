@@ -2,10 +2,13 @@
 import { APIError } from "better-auth/api";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  BOT_TOKEN,
   createClient,
   createMemoryAuth,
   createSqliteAuth,
   type MemoryDB,
+  multiBots,
+  SECOND_BOT_TOKEN,
   signInitData,
   signWidgetData,
 } from "./testing/harness";
@@ -549,4 +552,42 @@ describe("maxAuthAge reaches the sign-in endpoints", () => {
       expect(oldest.status).toBe(200);
     }
   );
+});
+
+describe("Login Widget sign-in with multiple bots", () => {
+  it("accepts widget data signed by either bot", async () => {
+    const { client, db } = createMemoryAuth({ bots: multiBots() });
+
+    const first = await client.post(
+      "/telegram/signin",
+      await signWidgetData({ id: 42, first_name: "Ann" }, BOT_TOKEN)
+    );
+    client.clearCookies();
+    const second = await client.post(
+      "/telegram/signin",
+      await signWidgetData({ id: 42, first_name: "Ann" }, SECOND_BOT_TOKEN)
+    );
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.json.user.id).toBe(first.json.user.id);
+    expect(db.user).toHaveLength(1);
+    expect(db.account).toHaveLength(1);
+  });
+
+  it("still rejects widget data signed by an unknown bot", async () => {
+    const { client, db } = createMemoryAuth({ bots: multiBots() });
+
+    const response = await client.post(
+      "/telegram/signin",
+      await signWidgetData(
+        { id: 42, first_name: "Ann" },
+        "999999999:AAunknownbot"
+      )
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.json.code).toBe("INVALID_AUTHENTICATION");
+    expect(db.user).toHaveLength(0);
+  });
 });

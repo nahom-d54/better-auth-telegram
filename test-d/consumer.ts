@@ -1,7 +1,11 @@
 // Compiled against the built package (dist/) by `npm run test:types`.
 import { betterAuth } from "better-auth";
 import { createAuthClient } from "better-auth/client";
-import { type TelegramOIDCClaims, telegram } from "better-auth-telegram";
+import {
+  type TelegramBotDefinition,
+  type TelegramOIDCClaims,
+  telegram,
+} from "better-auth-telegram";
 import { telegramClient } from "better-auth-telegram/client";
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -15,6 +19,31 @@ const auth = betterAuth({
     telegram({ botToken: "1:x", botUsername: "bot", oidc: { enabled: true } }),
   ],
 });
+
+// Multiple bots: the new shape, with legacy singular fields still accepted.
+const bots: TelegramBotDefinition[] = [
+  { key: "default", token: "1:x", username: "bot" },
+  {
+    key: "ngo",
+    token: "2:y",
+    username: "ngo_bot",
+    oidc: { clientId: "2", clientSecret: "secret", providerId: "tg-ngo" },
+  },
+  { key: "mini", token: "3:z" },
+];
+export const multiBotAuth = betterAuth({
+  plugins: [
+    telegram({
+      bots,
+      botToken: "1:x",
+      botUsername: "bot",
+      loginWidget: false,
+      miniApp: { enabled: true },
+      oidc: { enabled: true, clientSecret: "secret" },
+    }),
+  ],
+});
+export const legacyBots: TelegramBotDefinition[] = [{ key: "a", token: "1:x" }];
 
 // Server endpoints are typed (optional because flows can be disabled).
 typed(auth.api.signInWithTelegram);
@@ -102,4 +131,23 @@ export async function signInContract() {
   });
   // @ts-expect-error Mini App sign-in accepts the raw signed string, not parsed data
   await client.signInWithMiniApp({ user: { id: 42 } });
+}
+
+// Per-bot client selection and the additive bot list.
+export async function multiBotClient() {
+  const config = await client.getTelegramConfig({
+    bot: "ngo",
+    headers: { "x-request-source": "dashboard" },
+  });
+  typed(config.data?.bots[0]?.key) satisfies string | undefined;
+  await client.signInWithTelegramOIDC({
+    bot: "ngo",
+    providerId: "telegram-oidc-ngo",
+    callbackURL: "/dashboard",
+  });
+  await client.initTelegramWidget(
+    "telegram-login",
+    { bot: "ngo", size: "medium" },
+    () => undefined
+  );
 }

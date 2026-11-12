@@ -1,5 +1,9 @@
-import { DEFAULT_MAX_AUTH_AGE, ERROR_CODES } from "./constants";
+import { type ResolvedTelegramBot, resolveBots } from "./bot-config";
+import { DEFAULT_MAX_AUTH_AGE } from "./constants";
 import type { TelegramOIDCOptions, TelegramPluginOptions } from "./types";
+
+/** `<bot id>:<secret>`, e.g. "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw". */
+const BOT_TOKEN_SHAPE = /^\d+:[\w-]+$/u;
 
 /**
  * Resolved configuration for the Telegram plugin.
@@ -8,7 +12,10 @@ import type { TelegramOIDCOptions, TelegramPluginOptions } from "./types";
 export interface TelegramPluginConfig {
   allowUserToLink: boolean;
   autoCreateUser: boolean;
+  bots: ResolvedTelegramBot[];
+  /** First bot token, kept for internal compatibility. */
   botToken: string;
+  /** First bot username, kept for internal compatibility. */
   botUsername: string;
   mapMiniAppDataToUser?: NonNullable<
     TelegramPluginOptions["miniApp"]
@@ -20,20 +27,19 @@ export interface TelegramPluginConfig {
   miniAppValidateInitData: boolean;
   oidc?: TelegramOIDCOptions;
   oidcEnabled: boolean;
+  /** OIDC provider ids configured for this instance. */
+  oidcProviderIds: string[];
   testMode: boolean;
   /** Configuration problems, logged by `init` through Better Auth's logger. */
   warnings: string[];
   widgetEnabled: boolean;
 }
 
-/** `<bot id>:<secret>`, e.g. "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw". */
-const BOT_TOKEN_SHAPE = /^\d+:[\w-]+$/u;
-
 /**
  * Parses `TelegramPluginOptions`, applies defaults, and collects warnings
  * about missing or suspicious configuration (logged by the plugin's `init`
- * through Better Auth's logger). Never throws: build-time environments may
- * resolve secrets later, and credential use is guarded at request time.
+ * through Better Auth's logger). Structural mistakes such as duplicate bot
+ * keys or provider ids throw a plain `Error`.
  */
 export function createPluginConfig(
   options: TelegramPluginOptions
@@ -80,44 +86,23 @@ export function createPluginConfig(
 
   const hmacFlow =
     widgetEnabled || (miniAppEnabled && miniApp?.validateInitData !== false);
-  if (hmacFlow && !resolvedBotToken) {
-    warn(
-      `${ERROR_CODES.BOT_TOKEN_REQUIRED.message}. The enabled HMAC flow will reject requests until it is configured.`
-    );
-  }
 
-  if (widgetEnabled && !resolvedBotUsername) {
-    warn(
-      `${ERROR_CODES.BOT_USERNAME_REQUIRED.message}. The Login Widget cannot be rendered until it is configured.`
-    );
-  }
-
-  if (oidcEnabled && !(oidc?.clientId || resolvedBotToken)) {
-    warn(
-      "OIDC: clientId is required. Configure oidc.clientId or botToken before starting an OIDC login."
-    );
-  }
-
-  if (oidcEnabled && !oidc?.clientSecret) {
-    warn(
-      "OIDC: clientSecret is required. Configure oidc.clientSecret (the Client Secret shown in @BotFather > your bot > Login Widget) before starting an OIDC login."
-    );
-  }
+  const resolved = resolveBots(
+    {
+      botToken: resolvedBotToken,
+      botUsername: resolvedBotUsername,
+      bots: options.bots,
+      hmacFlow,
+      oidc,
+      oidcEnabled,
+      widgetEnabled,
+    },
+    warn
+  );
 
   if (miniAppEnabled && miniApp?.validateInitData === false) {
     warn(
       "miniApp.validateInitData is false: Mini App sign-in accepts unsigned initData, so anyone can sign in as any Telegram user. Never use this in production."
-    );
-  }
-
-  const [widgetBotId] = resolvedBotToken.split(":");
-  if (
-    widgetEnabled &&
-    oidcEnabled &&
-    (!oidc?.clientId || oidc.clientId === widgetBotId)
-  ) {
-    warn(
-      "Login Widget and OIDC are both enabled on the same bot. Switching a bot to OpenID Connect in @BotFather permanently disables its legacy Login Widget; use a second bot for OIDC (oidc.clientId and oidc.clientSecret) or set loginWidget: false."
     );
   }
 
@@ -144,8 +129,10 @@ export function createPluginConfig(
   }
 
   return {
-    botToken: resolvedBotToken,
-    botUsername: resolvedBotUsername,
+    botToken: resolved.botToken,
+    botUsername: resolved.botUsername,
+    bots: resolved.bots,
+    oidcProviderIds: resolved.oidcProviderIds,
     widgetEnabled,
     miniAppEnabled,
     oidcEnabled,

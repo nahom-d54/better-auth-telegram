@@ -4,6 +4,7 @@ import {
   BOT_ID,
   createMemoryAuth,
   mockTelegramOIDC,
+  multiBots,
   signInWithTelegramOIDC,
   type TelegramOIDCMock,
   telegramClaims,
@@ -69,6 +70,26 @@ describe("the authorization request sent to Telegram", () => {
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
     expect(url.searchParams.get("redirect_uri")).toBe(
       "http://localhost:3000/api/auth/callback/telegram-oidc"
+    );
+  });
+
+  it("uses the provider id of the selected bot in the callback URL", async () => {
+    const { client } = createMemoryAuth({
+      loginWidget: false,
+      bots: multiBots({
+        clientId: telegramMock.clientId,
+        clientSecret: telegramMock.clientSecret,
+      }),
+      oidc: { enabled: true },
+    });
+    const start = await client.post("/sign-in/social", {
+      provider: "telegram-oidc-ngo",
+      callbackURL: "/dashboard",
+    });
+
+    expect(start.status).toBe(200);
+    expect(new URL(start.json.url).searchParams.get("redirect_uri")).toBe(
+      "http://localhost:3000/api/auth/callback/telegram-oidc-ngo"
     );
   });
 

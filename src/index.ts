@@ -13,6 +13,7 @@ import {
   refreshSessionAfterOIDC,
   telegramIdentityHooks,
 } from "./telegram-identity";
+import { rememberTelegramProviderIds } from "./telegram-providers";
 import type { TelegramPluginOptions } from "./types";
 import { createWidgetEndpoints, getWidgetRateLimits } from "./widget-endpoints";
 
@@ -23,6 +24,8 @@ export type { TelegramPluginConfig } from "./plugin-config";
 export type {
   TelegramAccountRecord,
   TelegramAuthData,
+  TelegramBotDefinition,
+  TelegramBotOIDCOptions,
   TelegramMappedUser,
   TelegramMiniAppChat,
   TelegramMiniAppData,
@@ -63,26 +66,40 @@ export const telegram = (options: TelegramPluginOptions) => {
       for (const warning of config.warnings) {
         ctx.logger.warn(warning);
       }
-      const provider = config.oidcEnabled
-        ? createTelegramOIDCProvider(config.botToken, config.oidc!, ctx.logger)
-        : null;
+      rememberTelegramProviderIds(ctx, config.oidcProviderIds);
+      const identityFields = config.widgetEnabled || config.miniAppEnabled;
+      const providers = config.oidcEnabled
+        ? config.bots.flatMap((bot) =>
+            bot.oidc && bot.oidcProviderId
+              ? [
+                  withTelegramIdentityLinking(
+                    createTelegramOIDCProvider(
+                      bot.token,
+                      {
+                        ...config.oidc,
+                        clientId: bot.oidc.clientId,
+                        clientSecret: bot.oidc.clientSecret,
+                      },
+                      ctx.logger,
+                      bot.oidcProviderId
+                    ),
+                    identityFields
+                  ),
+                ]
+              : []
+          )
+        : [];
       return {
-        ...(provider
+        ...(providers.length > 0
           ? {
               context: {
-                socialProviders: [
-                  withTelegramIdentityLinking(
-                    provider,
-                    config.widgetEnabled || config.miniAppEnabled
-                  ),
-                  ...ctx.socialProviders,
-                ],
+                socialProviders: [...providers, ...ctx.socialProviders],
               },
             }
           : {}),
         options: {
           databaseHooks: telegramIdentityHooks(ctx, {
-            identityFields: config.widgetEnabled || config.miniAppEnabled,
+            identityFields,
             updateUserInfo:
               config.oidcEnabled && !!config.oidc?.updateUserInfoOnSignIn,
           }),
@@ -101,7 +118,7 @@ export const telegram = (options: TelegramPluginOptions) => {
     },
 
     hooks: {
-      after: config.oidcEnabled ? [refreshSessionAfterOIDC] : [],
+      after: config.oidcProviderIds.length > 0 ? [refreshSessionAfterOIDC] : [],
     },
 
     $ERROR_CODES: ERROR_CODES,

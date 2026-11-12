@@ -4,6 +4,7 @@ import {
   createClient,
   createMemoryAuth,
   mockTelegramOIDC,
+  multiBots,
   signInitData,
   signInWithTelegramOIDC,
   signWidgetData,
@@ -289,5 +290,35 @@ describe("OIDC links a proven Telegram identity", () => {
     expect((await other.get("/get-session")).json.user.id).toBe(
       signedUp.json.user.id
     );
+  });
+
+  it("links another bot's OIDC provider to the user proven by telegramId", async () => {
+    const { client, db } = createMemoryAuth({
+      loginWidget: false,
+      miniApp: { enabled: true },
+      bots: multiBots({
+        clientId: provider.clientId,
+        clientSecret: provider.clientSecret,
+      }),
+      oidc: { enabled: true },
+    });
+    const user = await miniAppUser(client);
+
+    const { location } = await signInWithTelegramOIDC(
+      client,
+      provider,
+      telegramClaims({ sub: "sub-ngo" }),
+      { provider: "telegram-oidc-ngo" }
+    );
+
+    expect(location).toBe("/dashboard");
+    expect(db.user).toHaveLength(1);
+    expect(db.account.map((account) => account.providerId).sort()).toEqual([
+      "telegram",
+      "telegram-oidc-ngo",
+    ]);
+    expect(
+      db.account.find((account) => account.providerId === "telegram-oidc-ngo")
+    ).toMatchObject({ userId: user.id, accountId: "sub-ngo" });
   });
 });

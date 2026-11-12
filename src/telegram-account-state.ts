@@ -2,7 +2,8 @@ import type { GenericEndpointContext } from "@better-auth/core";
 import { getCurrentAdapter } from "@better-auth/core/context";
 import type { Account, User } from "better-auth";
 import { APIError } from "better-auth/api";
-import { ERROR_CODES, PLUGIN_ID, TELEGRAM_OIDC_PROVIDER_ID } from "./constants";
+import { ERROR_CODES, PLUGIN_ID } from "./constants";
+import { isOIDCProvider } from "./telegram-providers";
 
 /** A Telegram user proven by a verified Login Widget or Mini App payload. */
 export interface TelegramIdentity {
@@ -76,7 +77,7 @@ export async function hasLinkedTelegramIdentity(
   return accounts.some(
     (account) =>
       (account.providerId === PLUGIN_ID && account.accountId === telegramId) ||
-      (account.providerId === TELEGRAM_OIDC_PROVIDER_ID &&
+      (isOIDCProvider(ctx.context, account.providerId) &&
         account.telegramId === telegramId)
   );
 }

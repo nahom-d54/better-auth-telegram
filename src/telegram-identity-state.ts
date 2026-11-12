@@ -7,6 +7,8 @@ interface VerifiedSignIn {
   claims: TelegramOIDCClaims;
   /** Account owner before Better Auth awaits application sign-in validation. */
   expectedUserId?: string | undefined;
+  /** The configured OIDC provider whose ID token was verified. */
+  providerId: string;
   /** The user info `getUserInfo` gave Better Auth (mapper output included). */
   userInfo: Record<string, unknown>;
 }
@@ -19,10 +21,16 @@ const verifiedSignIn = defineRequestState<VerifiedSignIn | null>(() => null);
 
 export async function rememberVerifiedClaims(
   claims: TelegramOIDCClaims,
-  userInfo: Record<string, unknown>
+  userInfo: Record<string, unknown>,
+  providerId: string
 ) {
   if (await hasRequestState()) {
-    await verifiedSignIn.set({ claims, userInfo, changedUserIds: new Set() });
+    await verifiedSignIn.set({
+      claims,
+      userInfo,
+      providerId,
+      changedUserIds: new Set(),
+    });
   }
 }
 

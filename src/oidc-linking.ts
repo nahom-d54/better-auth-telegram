@@ -8,7 +8,7 @@ import type { OAuth2Tokens, OAuthProvider } from "@better-auth/core/oauth2";
 import type { Account } from "better-auth";
 import { APIError, getOAuthState } from "better-auth/api";
 import { applyUpdateUserInfoOnLink, setTokenUtil } from "better-auth/oauth2";
-import { ERROR_CODES, TELEGRAM_OIDC_PROVIDER_ID } from "./constants";
+import { ERROR_CODES } from "./constants";
 import {
   findProvenTelegramUser,
   validateTelegramOIDCLink,
@@ -21,13 +21,14 @@ async function linkVerifiedIdentity(
   ctx: GenericEndpointContext,
   claims: TelegramOIDCClaims,
   profile: Record<string, unknown>,
-  tokens: OAuth2Tokens
+  tokens: OAuth2Tokens,
+  providerId: string
 ) {
   const telegramId = claims.id;
   if (!telegramId) {
     return;
   }
-  const key = { providerId: TELEGRAM_OIDC_PROVIDER_ID, accountId: claims.sub };
+  const key = { providerId, accountId: claims.sub };
   await withTelegramOperation(ctx, `oidc:${claims.sub}`, async () => {
     const hasBinding = async () =>
       (await getCurrentAdapter(ctx.context.adapter)).findOne<Account>({
@@ -52,7 +53,7 @@ async function linkVerifiedIdentity(
       throw APIError.from("UNAUTHORIZED", ERROR_CODES.ACCOUNT_NOT_LINKED);
     }
     await withTelegramOperation(ctx, `user:${user.id}`, async () => {
-      await validateTelegramOIDCLink(ctx, user, claims, profile);
+      await validateTelegramOIDCLink(ctx, user, claims, profile, providerId);
       // Guard the final account write after all application hooks, before any
       // adapter persists it. A hook cannot redirect this authentication binding.
       const guarded: typeof ctx.context.adapter = {
@@ -149,11 +150,10 @@ export function withTelegramIdentityLinking(
         return result;
       }
       const isCallback =
-        current.path === "/callback/:id" &&
-        current.params?.id === TELEGRAM_OIDC_PROVIDER_ID;
+        current.path === "/callback/:id" && current.params?.id === provider.id;
       const isTokenSignIn =
         current.path === "/sign-in/social" &&
-        current.body?.provider === TELEGRAM_OIDC_PROVIDER_ID &&
+        current.body?.provider === provider.id &&
         !!current.body?.idToken;
       if ((isCallback && !(await getOAuthState())?.link) || isTokenSignIn) {
         if (identityFields) {
@@ -161,7 +161,8 @@ export function withTelegramIdentityLinking(
             current as GenericEndpointContext,
             result.data,
             result.user,
-            tokens
+            tokens,
+            provider.id
           );
         }
         const signIn = await currentSignIn();
@@ -173,7 +174,7 @@ export function withTelegramIdentityLinking(
           ).findMany<Account>({
             model: "account",
             where: [
-              { field: "providerId", value: TELEGRAM_OIDC_PROVIDER_ID },
+              { field: "providerId", value: provider.id },
               { field: "accountId", value: result.data.sub },
             ],
             limit: 2,

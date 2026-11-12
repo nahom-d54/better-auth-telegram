@@ -1,6 +1,6 @@
 import type { AuthContext, BetterAuthOptions } from "@better-auth/core";
 import { APIError } from "better-auth/api";
-import { ERROR_CODES, PLUGIN_ID, TELEGRAM_OIDC_PROVIDER_ID } from "./constants";
+import { ERROR_CODES } from "./constants";
 import { currentSignIn } from "./telegram-identity-state";
 import {
   accountProvenByClaims,
@@ -9,13 +9,12 @@ import {
 } from "./telegram-identity-sync";
 import { isAllowedPlaceholder } from "./telegram-placeholder";
 import { updateUserInfo } from "./telegram-profile";
+import { isOIDCProvider, isTelegramProvider } from "./telegram-providers";
 
 // biome-ignore lint/performance/noBarrelFile: Keep existing internal imports stable across the extraction.
 export { refreshSessionAfterOIDC } from "./telegram-identity-session";
 export { rememberVerifiedClaims } from "./telegram-identity-state";
 export { reconcileTelegramIdentity } from "./telegram-identity-sync";
-
-const TELEGRAM_PROVIDERS = new Set([PLUGIN_ID, TELEGRAM_OIDC_PROVIDER_ID]);
 
 /**
  * Database hooks installed by the plugin's `init`:
@@ -73,7 +72,8 @@ export function telegramIdentityHooks(
         const account = await accountProvenByClaims(
           ctx,
           session.userId,
-          signIn.claims
+          signIn.claims,
+          signIn.providerId
         );
         if (account && options.identityFields) {
           // A refused identity update stops the sign-in.
@@ -90,7 +90,12 @@ export function telegramIdentityHooks(
         // Application validation and profile hooks may await a concurrent unlink.
         if (
           signIn.expectedUserId === session.userId &&
-          !(await accountProvenByClaims(ctx, session.userId, signIn.claims))
+          !(await accountProvenByClaims(
+            ctx,
+            session.userId,
+            signIn.claims,
+            signIn.providerId
+          ))
         ) {
           throw APIError.from("UNAUTHORIZED", ERROR_CODES.ACCOUNT_NOT_LINKED);
         }
@@ -107,7 +112,8 @@ export function telegramIdentityHooks(
           const signIn = await currentSignIn();
           if (
             signIn &&
-            account.providerId === TELEGRAM_OIDC_PROVIDER_ID &&
+            isOIDCProvider(ctx, account.providerId) &&
+            account.providerId === signIn.providerId &&
             account.accountId === signIn.claims.sub
           ) {
             // Plugin hooks precede application hooks. Pin the intended owner
@@ -116,11 +122,15 @@ export function telegramIdentityHooks(
           }
         },
         async after(account) {
-          if (account.providerId !== TELEGRAM_OIDC_PROVIDER_ID) {
+          if (!isOIDCProvider(ctx, account.providerId)) {
             return;
           }
           const signIn = await currentSignIn();
-          if (signIn && account.accountId === signIn.claims.sub) {
+          if (
+            signIn &&
+            account.providerId === signIn.providerId &&
+            account.accountId === signIn.claims.sub
+          ) {
             if (signIn.expectedUserId !== account.userId) {
               throw APIError.from(
                 "UNAUTHORIZED",
@@ -142,7 +152,7 @@ export function telegramIdentityHooks(
         async after(account) {
           if (
             options.identityFields &&
-            TELEGRAM_PROVIDERS.has(account.providerId)
+            isTelegramProvider(ctx, account.providerId)
           ) {
             await reconcileTelegramIdentity(ctx, account.userId);
           }

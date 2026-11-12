@@ -8,9 +8,11 @@ import type {
   TelegramClientError,
   TelegramConfigResponse,
   TelegramLinkResponse,
+  TelegramMiniAppValidationResponse,
   TelegramSignInResponse,
 } from "./client-types";
 import { createTelegramWidgetActions } from "./client-widget";
+import { TELEGRAM_OIDC_PROVIDER_ID } from "./constants";
 import { TELEGRAM_ERROR_CODES } from "./error-codes";
 import type { telegram } from "./index";
 import type { TelegramAuthData } from "./types";
@@ -18,6 +20,7 @@ import type { TelegramAuthData } from "./types";
 export type {
   TelegramClientError,
   TelegramLinkResponse,
+  TelegramMiniAppValidationResponse,
   TelegramSignInResponse,
   TelegramUser,
 } from "./client-types";
@@ -135,15 +138,19 @@ export const telegramClient = () => {
 
         /**
          * Get Telegram bot configuration
-         * @param fetchOptions - Optional fetch options (e.g., custom headers, cache control)
+         * @param options - Optional bot key and fetch options (e.g., headers)
          */
-        getTelegramConfig: async (fetchOptions?: FetchOptions) => {
+        getTelegramConfig: async (
+          options?: FetchOptions & { bot?: string }
+        ) => {
+          const { bot, ...fetchOptions } = options ?? {};
           const response = await $fetch<
             TelegramConfigResponse,
             TelegramClientError
           >("/telegram/config", {
             method: "GET",
             ...fetchOptions,
+            ...(bot ? { query: { ...(fetchOptions.query ?? {}), bot } } : {}),
           });
 
           return response;
@@ -194,7 +201,7 @@ export const telegramClient = () => {
           fetchOptions?: FetchOptions
         ) => {
           const response = await $fetch<
-            { valid: boolean; data: any },
+            TelegramMiniAppValidationResponse,
             TelegramClientError
           >("/telegram/miniapp/validate", {
             method: "POST",
@@ -247,35 +254,44 @@ export const telegramClient = () => {
          * Initiates the standard OAuth 2.0 Authorization Code flow with PKCE
          * via oauth.telegram.org. Requires `oidc.enabled: true` on the server.
          *
-         * @param options - Callback URLs for redirect after authentication
+         * @param options - Callback URLs, an optional bot key or provider id
          * @param fetchOptions - Optional fetch options
          *
          * @example
          * ```ts
          * await authClient.signInWithTelegramOIDC({
          *   callbackURL: "/dashboard",
+         *   bot: "ngo",
          * });
          * ```
          */
         signInWithTelegramOIDC: async (
           options?: {
+            bot?: string;
             callbackURL?: string;
             errorCallbackURL?: string;
+            providerId?: string;
           },
           fetchOptions?: FetchOptions
-        ) =>
-          await $fetch<{ url: string; redirect: boolean }, TelegramClientError>(
-            "/sign-in/social",
-            {
-              method: "POST",
-              body: {
-                provider: "telegram-oidc",
-                callbackURL: options?.callbackURL,
-                errorCallbackURL: options?.errorCallbackURL,
-              },
-              ...fetchOptions,
-            }
-          ),
+        ) => {
+          const provider =
+            options?.providerId ??
+            (options?.bot && options.bot !== "default"
+              ? `${TELEGRAM_OIDC_PROVIDER_ID}-${options.bot}`
+              : TELEGRAM_OIDC_PROVIDER_ID);
+          return await $fetch<
+            { url: string; redirect: boolean },
+            TelegramClientError
+          >("/sign-in/social", {
+            method: "POST",
+            body: {
+              provider,
+              callbackURL: options?.callbackURL,
+              errorCallbackURL: options?.errorCallbackURL,
+            },
+            ...fetchOptions,
+          });
+        },
       };
     },
   } satisfies BetterAuthClientPlugin;

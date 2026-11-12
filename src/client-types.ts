@@ -35,9 +35,18 @@ export interface TelegramLinkResponse {
 }
 
 export interface TelegramConfigResponse {
+  bots: { key: string; username: string }[];
   botUsername: string;
   loginWidgetEnabled: boolean;
   miniAppEnabled: boolean;
   oidcEnabled: boolean;
   testMode: boolean;
+}
+
+/** Response of `/telegram/miniapp/validate`. */
+export interface TelegramMiniAppValidationResponse {
+  /** Numeric bot id whose token signed the initData, when valid. */
+  botId?: string;
+  data: any;
+  valid: boolean;
 }

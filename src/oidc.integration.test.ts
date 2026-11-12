@@ -6,6 +6,7 @@ import {
   createMemoryAuth,
   createSqliteAuth,
   mockTelegramOIDC,
+  multiBots,
   signInWithTelegramOIDC,
   type TelegramOIDCMock,
   type TestClient,
@@ -512,5 +513,60 @@ describe("Telegram OIDC sign-in with a client-submitted ID token", () => {
       0, 0, 0,
     ]);
     expect(client.hasSession()).toBe(false);
+  });
+});
+
+describe("multiple bots", () => {
+  const multi = () => ({
+    loginWidget: false,
+    miniApp: { enabled: true },
+    bots: multiBots({
+      clientId: telegramMock.clientId,
+      clientSecret: telegramMock.clientSecret,
+    }),
+    oidc: { enabled: true },
+  });
+
+  it("registers a provider per bot and resolves both to one Telegram user", async () => {
+    const { client, db } = createMemoryAuth(multi());
+
+    const first = await signInWithTelegramOIDC(
+      client,
+      telegramMock,
+      telegramClaims({ sub: "sub-default", id: "8306595751" })
+    );
+    client.clearCookies();
+    const second = await signInWithTelegramOIDC(
+      client,
+      telegramMock,
+      telegramClaims({ sub: "sub-ngo", id: "8306595751" }),
+      { provider: "telegram-oidc-ngo" }
+    );
+    const session = await client.get("/get-session");
+
+    expect(first.location).toBe("/dashboard");
+    expect(second.location).toBe("/dashboard");
+    expect(db.user).toHaveLength(1);
+    expect(db.account.map((account) => account.providerId).sort()).toEqual([
+      "telegram-oidc",
+      "telegram-oidc-ngo",
+    ]);
+    expect(db.account.map((account) => account.accountId).sort()).toEqual([
+      "sub-default",
+      "sub-ngo",
+    ]);
+    expect(session.json.user.id).toBe(db.user[0]!.id);
+    expect(session.json.user.telegramId).toBe("8306595751");
+  });
+
+  it("keeps the default provider id stable across bots", async () => {
+    const { client, db } = createMemoryAuth(multi());
+
+    await signInWithTelegramOIDC(client, telegramMock);
+
+    expect(db.account[0]).toMatchObject({
+      providerId: "telegram-oidc",
+      accountId: "12224742808376279442",
+    });
   });
 });

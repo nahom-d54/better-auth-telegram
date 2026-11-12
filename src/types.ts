@@ -196,6 +196,56 @@ export interface TelegramOIDCOptions {
 }
 
 /**
+ * OIDC credentials for one bot. Each bot has its own OIDC app in @BotFather.
+ */
+export interface TelegramBotOIDCOptions {
+  /**
+   * Client ID of this bot's OIDC app. Defaults to the bot id part of `token`.
+   */
+  clientId?: string;
+
+  /**
+   * Client Secret shown in @BotFather after switching this bot to OpenID
+   * Connect. This is NOT the bot token.
+   */
+  clientSecret?: string;
+
+  /**
+   * Social provider id. Defaults to `telegram-oidc` for the `default` bot and
+   * `telegram-oidc-<key>` for every other bot.
+   */
+  providerId?: string;
+}
+
+/**
+ * One Telegram bot served by the plugin.
+ */
+export interface TelegramBotDefinition {
+  /**
+   * Unique bot key, matching `^[a-z0-9-]+$`. The key identifies the bot in
+   * `GET /telegram/config?bot=<key>` and in the client helpers.
+   */
+  key: string;
+
+  /**
+   * OIDC configuration for this bot. Omit it to serve only the HMAC flows for
+   * this bot.
+   */
+  oidc?: TelegramBotOIDCOptions;
+
+  /**
+   * Bot token obtained from @BotFather, used to verify Login Widget and Mini
+   * App signatures.
+   */
+  token: string;
+
+  /**
+   * Bot username (without @), used to render the Login Widget.
+   */
+  username?: string;
+}
+
+/**
  * Configuration options for the Telegram plugin
  */
 export interface TelegramPluginOptions {
@@ -210,15 +260,28 @@ export interface TelegramPluginOptions {
    * @default true
    */
   autoCreateUser?: boolean;
+
+  /**
+   * Multiple Telegram bots served by one Better Auth instance. The first bot
+   * (or the `default` entry) keeps using `telegram-oidc` as its OIDC provider
+   * id; additional bots use `telegram-oidc-<key>`.
+   */
+  bots?: TelegramBotDefinition[];
   /**
    * Bot token obtained from @BotFather
    * Used for verifying authentication data
+   *
+   * Kept for backward compatibility. When `bots` is set, this is the
+   * `default` bot if that list does not contain one.
    */
   botToken?: string;
 
   /**
    * Bot username (without @)
    * Used for generating the login widget
+   *
+   * Kept for backward compatibility. When `bots` is set, this is the
+   * `default` bot if that list does not contain one.
    */
   botUsername?: string;
 
